@@ -223,16 +223,16 @@ struct _Reinterpret_move_iter {
 
     // post ++ intentionally omitted
 
-#ifndef __CUDACC__ // TRANSITION, VSO#568006
+#ifndef __CUDACC__ // TRANSITION, VSO-568006
     _NODISCARD
-#endif // TRANSITION, VSO#568006
+#endif // TRANSITION, VSO-568006
     friend bool operator==(const _Reinterpret_move_iter& _Lhs, const _Reinterpret_move_iter& _Rhs) {
         return _Lhs._Base == _Rhs._Base;
     }
 
-#ifndef __CUDACC__ // TRANSITION, VSO#568006
+#ifndef __CUDACC__ // TRANSITION, VSO-568006
     _NODISCARD
-#endif // TRANSITION, VSO#568006
+#endif // TRANSITION, VSO-568006
     friend bool operator!=(const _Reinterpret_move_iter& _Lhs, const _Reinterpret_move_iter& _Rhs) {
         return _Lhs._Base != _Rhs._Base;
     }
@@ -999,7 +999,6 @@ public:
         return _Vec.max_size() >> 1;
     }
 
-    // _Hashval is an ABI zombie name
     _NODISCARD size_type bucket(const key_type& _Keyval) const
         noexcept(_Nothrow_hash<_Traits, key_type>) /* strengthened */ {
         return _Traitsobj(_Keyval) & _Mask;
@@ -1234,7 +1233,7 @@ private:
     }
 
 public:
-    template <class _Iter = iterator, class = enable_if_t<!is_same_v<_Iter, const_iterator>>>
+    template <class _Iter = iterator, enable_if_t<!is_same_v<_Iter, const_iterator>, int> = 0>
     iterator erase(iterator _Plist) noexcept(_Nothrow_hash<_Traits, key_type>) /* strengthened */ {
         return _List._Make_iter(_Unchecked_erase(_Plist._Ptr));
     }
@@ -1272,12 +1271,12 @@ public:
 
     void clear() noexcept {
         // TRANSITION, ABI:
-        // LWG 2550 requires implementations to make clear() O(size()), independent of bucket_count().
+        // LWG-2550 requires implementations to make clear() O(size()), independent of bucket_count().
         // Unfortunately our current data structure / ABI does not allow achieving this in the general case because:
         //   (1) Finding the bucket that goes with an element requires running the hash function
         //   (2) The hash function operator() may throw exceptions, and
         //   (3) clear() is a noexcept function.
-        // We do comply with LWG 2550 if the hash function is noexcept, or if the container was empty.
+        // We do comply with LWG-2550 if the hash function is noexcept, or if the container was empty.
         const auto _Oldsize = _List._Mypair._Myval2._Mysize;
         if (_Oldsize == 0) {
             return;
@@ -1288,7 +1287,7 @@ public:
                 // In testing, hash<size_t>{}(size_t{}) takes about 14 times as much time as assigning a pointer, or
                 // ~7-8 times as much as clearing a bucket. Therefore, if we would need to assign over more than 8 times
                 // as many buckets as elements, remove element-by-element.
-                if ((bucket_count() >> 3) > _Oldsize) {
+                if (bucket_count() / 8 > _Oldsize) {
                     const auto _Head = _List._Mypair._Myval2._Myhead;
                     _Unchecked_erase(_Head->_Next, _Head);
                     return;

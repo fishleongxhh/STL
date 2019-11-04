@@ -382,7 +382,7 @@ struct _Tree_node {
 };
 
 template <class _Ty>
-struct _Tree_simple_types : public _Simple_types<_Ty> {
+struct _Tree_simple_types : _Simple_types<_Ty> {
     using _Node    = _Tree_node<_Ty, void*>;
     using _Nodeptr = _Node*;
 };
@@ -908,7 +908,7 @@ public:
 
 private:
     void _Different_allocator_move_construct(_Tree&& _Right) {
-        // TRANSITION, VSO#675959 (inline into only caller when that is fixed)
+        // TRANSITION, VSO-675959 (inline into only caller when that is fixed)
         auto&& _Alproxy   = _GET_PROXY_ALLOCATOR(_Alnode, _Getal());
         const auto _Scary = _Get_scary();
         _Container_proxy_ptr<_Alty> _Proxy(_Alproxy, *_Scary);
@@ -1407,7 +1407,7 @@ private:
     }
 
 public:
-    template <class _Iter = iterator, class = enable_if_t<!is_same_v<_Iter, const_iterator>>>
+    template <class _Iter = iterator, enable_if_t<!is_same_v<_Iter, const_iterator>, int> = 0>
     iterator erase(iterator _Where) noexcept /* strengthened */ {
         const auto _Scary = _Get_scary();
 #if _ITERATOR_DEBUG_LEVEL == 2

@@ -332,7 +332,7 @@ struct _List_node { // list node
 };
 
 template <class _Ty>
-struct _List_simple_types : public _Simple_types<_Ty> {
+struct _List_simple_types : _Simple_types<_Ty> {
     using _Node    = _List_node<_Ty, void*>;
     using _Nodeptr = _Node*;
 };
@@ -565,8 +565,8 @@ public:
             break;
         }
 
-        auto _Mid        = _Sort(_First, _Size >> 1, _Pred);
-        const auto _Last = _Sort(_Mid, _Size - (_Size >> 1), _Pred);
+        auto _Mid        = _Sort(_First, _Size / 2, _Pred);
+        const auto _Last = _Sort(_Mid, _Size - _Size / 2, _Pred);
         _First           = _Merge_same(_First, _Mid, _Last, _Pred);
         return _Last;
     }
@@ -576,7 +576,6 @@ public:
 };
 
 // STRUCT TEMPLATE _List_node_emplace_op2
-// _List_node_emplace_op is an ABI zombie name
 template <class _Alnode>
 struct _List_node_emplace_op2 : _Alloc_construct_ptr<_Alnode> {
     using _Alnode_traits = allocator_traits<_Alnode>;
@@ -856,13 +855,13 @@ public:
         _Construct_range_unchecked(_Right._Unchecked_begin(), _Right._Unchecked_end());
     }
 
-    template <class _Iter, class = enable_if_t<_Is_iterator_v<_Iter>>>
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
     list(_Iter _First, _Iter _Last) : _Mypair(_Zero_then_variadic_args_t()) {
         _Adl_verify_range(_First, _Last);
         _Construct_range_unchecked(_Get_unwrapped(_First), _Get_unwrapped(_Last));
     }
 
-    template <class _Iter, class = enable_if_t<_Is_iterator_v<_Iter>>>
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
     list(_Iter _First, _Iter _Last, const _Alloc& _Al) : _Mypair(_One_then_variadic_args_t(), _Al) {
         _Adl_verify_range(_First, _Last);
         _Construct_range_unchecked(_Get_unwrapped(_First), _Get_unwrapped(_Last));
@@ -1268,7 +1267,7 @@ private:
     }
 
 public:
-    template <class _Iter, class = enable_if_t<_Is_iterator_v<_Iter>>>
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
     void assign(_Iter _First, _Iter _Last) {
         _Assign_cast<reference>(_Get_unwrapped(_First), _Get_unwrapped(_Last));
     }
@@ -1314,7 +1313,7 @@ public:
         return _Make_iter(_Op._Attach_before(_Mypair._Myval2, _Where._Ptr));
     }
 
-    template <class _Iter, class = enable_if_t<_Is_iterator_v<_Iter>>>
+    template <class _Iter, enable_if_t<_Is_iterator_v<_Iter>, int> = 0>
     iterator insert(const const_iterator _Where, _Iter _First, _Iter _Last) { // insert [_First, _Last) before _Where
 #if _ITERATOR_DEBUG_LEVEL == 2
         _STL_VERIFY(_Where._Getcont() == _STD addressof(_Mypair._Myval2), "list insert iterator outside range");
@@ -1732,19 +1731,19 @@ private:
             }
 
             auto& _Right_data = _Right._Mypair._Myval2;
-            _My_data._Mysize += _Count;
-            _Right_data._Mysize -= _Count;
-
 #if _ITERATOR_DEBUG_LEVEL == 2
             // transfer ownership
             if (_Count == 1) {
                 _My_data._Adopt_unique(_Right_data, _First);
-            } else if (_Count == _Right.size()) {
+            } else if (_Count == _Right_data._Mysize) {
                 _My_data._Adopt_all(_Right_data);
             } else {
                 _My_data._Adopt_range(_Right_data, _First, _Last);
             }
 #endif // _ITERATOR_DEBUG_LEVEL == 2
+
+            _My_data._Mysize += _Count;
+            _Right_data._Mysize -= _Count;
         }
 
         return _Scary_val::_Unchecked_splice(_Where, _First, _Last);
@@ -1816,6 +1815,18 @@ template <class _Ty, class _Alloc>
 _NODISCARD bool operator>=(const list<_Ty, _Alloc>& _Left, const list<_Ty, _Alloc>& _Right) {
     return !(_Left < _Right);
 }
+
+#if _HAS_CXX20
+template <class _Ty, class _Alloc, class _Uty>
+void erase(list<_Ty, _Alloc>& _Cont, const _Uty& _Val) {
+    _Cont.remove_if([&](_Ty& _Elem) { return _Elem == _Val; });
+}
+
+template <class _Ty, class _Alloc, class _Pr>
+void erase_if(list<_Ty, _Alloc>& _Cont, _Pr _Pred) {
+    _Cont.remove_if(_Pass_fn(_Pred));
+}
+#endif // _HAS_CXX20
 
 #if _HAS_CXX17
 namespace pmr {

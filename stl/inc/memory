@@ -23,7 +23,6 @@ _STL_DISABLE_CLANG_WARNINGS
 
 _STD_BEGIN
 // FUNCTION TEMPLATE uninitialized_copy_n
-// TRANSITION: _Uninitialized_copy_n_unchecked and _Uninitialized_copy_n_unchecked1 are ABI zombie names
 #if _HAS_IF_CONSTEXPR
 template <class _InIt, class _Diff, class _NoThrowFwdIt>
 _NoThrowFwdIt uninitialized_copy_n(const _InIt _First, const _Diff _Count_raw, _NoThrowFwdIt _Dest) {
@@ -142,7 +141,6 @@ _OutTy* uninitialized_move(const _InIt _First, const _InIt _Last, _OutTy (&_Dest
 #endif // _ITERATOR_DEBUG_ARRAY_OVERLOADS
 
 // FUNCTION TEMPLATE uninitialized_move_n
-// TRANSITION, _Uninitialized_move_n_unchecked is an ABI zombie name
 #if _HAS_IF_CONSTEXPR
 template <class _InIt, class _Diff, class _NoThrowFwdIt>
 pair<_InIt, _NoThrowFwdIt> uninitialized_move_n(_InIt _First, const _Diff _Count_raw, _NoThrowFwdIt _Dest) {
@@ -251,7 +249,6 @@ pair<_InTy*, _OutTy*> uninitialized_move_n(_InTy (&_First)[_InSize], const _Diff
 #endif // _HAS_CXX17
 
 // FUNCTION TEMPLATE uninitialized_fill_n
-// TRANSITION: _Uninitialized_fill_n_unchecked is an ABI zombie name
 #if _HAS_IF_CONSTEXPR
 template <class _NoThrowFwdIt, class _Diff, class _Tval>
 _NoThrowFwdIt uninitialized_fill_n(_NoThrowFwdIt _First, const _Diff _Count_raw, const _Tval& _Val) {
@@ -1480,8 +1477,6 @@ template <class _Dx, class _Ty>
 _Dx* get_deleter(const shared_ptr<_Ty>&) noexcept = delete; // requires static RTTI
 #endif // _HAS_STATIC_RTTI
 
-// _Ref_count_obj is an ABI zombie name
-
 // CLASS TEMPLATE _Ref_count_obj2
 template <class _Ty>
 class _Ref_count_obj2 : public _Ref_count_base { // handle reference counting for object in control block, no allocator
@@ -1549,8 +1544,6 @@ protected:
     }
 };
 
-// _Ref_count_obj_alloc is an ABI zombie name
-
 // CLASS TEMPLATE _Ref_count_obj_alloc2
 template <class _Ty, class _Alloc>
 class __declspec(empty_bases) _Ref_count_obj_alloc2 : public _Ebco_base<_Alloc>, public _Ref_count_base {
@@ -1597,7 +1590,7 @@ _NODISCARD shared_ptr<_Ty> make_shared(_Types&&... _Args) { // make a shared_ptr
 // FUNCTION TEMPLATE allocate_shared
 template <class _Ty, class _Alloc, class... _Types>
 _NODISCARD shared_ptr<_Ty> allocate_shared(const _Alloc& _Al, _Types&&... _Args) { // make a shared_ptr
-    // Note: As of 2019-05-28, this implements the proposed resolution of LWG 3210 (which controls whether
+    // Note: As of 2019-05-28, this implements the proposed resolution of LWG-3210 (which controls whether
     // allocator::construct sees T or const T when _Ty is const qualified)
     using _Refoa   = _Ref_count_obj_alloc2<remove_cv_t<_Ty>, _Alloc>;
     using _Alblock = _Rebind_alloc_t<_Alloc, _Refoa>;
@@ -1828,8 +1821,12 @@ public:
         enable_if_t<conjunction_v<is_reference<_Dx2>, is_constructible<_Dx2, remove_reference_t<_Dx2>>>, int> = 0>
     unique_ptr(pointer, remove_reference_t<_Dx>&&) = delete;
 
+#ifndef _M_CEE // TRANSITION, VSO-1006185
+    template <class _Dx2 = _Dx, enable_if_t<is_move_constructible_v<_Dx2>, int> = 0>
+#endif // _M_CEE
     unique_ptr(unique_ptr&& _Right) noexcept
-        : _Mypair(_One_then_variadic_args_t(), _STD forward<_Dx>(_Right.get_deleter()), _Right.release()) {}
+        : _Mypair(_One_then_variadic_args_t(), _STD forward<_Dx>(_Right.get_deleter()), _Right.release()) {
+    }
 
     template <class _Ty2, class _Dx2,
         enable_if_t<
@@ -1855,6 +1852,9 @@ public:
         return *this;
     }
 
+#ifndef _M_CEE // TRANSITION, VSO-1006185
+    template <class _Dx2 = _Dx, enable_if_t<is_move_assignable_v<_Dx2>, int> = 0>
+#endif // _M_CEE
     unique_ptr& operator=(unique_ptr&& _Right) noexcept {
         if (this != _STD addressof(_Right)) {
             reset(_Right.release());
@@ -1931,11 +1931,12 @@ public:
     constexpr unique_ptr() noexcept : _Mypair(_Zero_then_variadic_args_t()) {}
 
     template <class _Uty, class _Is_nullptr = is_same<_Uty, nullptr_t>>
-    using _Enable_ctor_reset = enable_if_t<is_same_v<_Uty, pointer> //
-                                           || _Is_nullptr::value //
-                                           || (is_same_v<pointer, element_type*> //
-                                               && is_pointer_v<_Uty> //
-                                               && is_convertible_v<remove_pointer_t<_Uty> (*)[], element_type (*)[]>)>;
+    using _Enable_ctor_reset =
+        enable_if_t<is_same_v<_Uty, pointer> //
+                    || _Is_nullptr::value //
+                    || (is_same_v<pointer, element_type*> //
+                        && is_pointer_v<_Uty> //
+                        && is_convertible_v<remove_pointer_t<_Uty> (*)[], element_type (*)[]>)>; // TRANSITION, GH-248
 
     template <class _Uty, class _Dx2 = _Dx, _Unique_ptr_enable_default_t<_Dx2> = 0, class = _Enable_ctor_reset<_Uty>>
     explicit unique_ptr(_Uty _Ptr) noexcept : _Mypair(_Zero_then_variadic_args_t(), _Ptr) {}
@@ -1953,9 +1954,16 @@ public:
         enable_if_t<conjunction_v<is_reference<_Dx2>, is_constructible<_Dx2, remove_reference_t<_Dx2>>>, int> = 0>
     unique_ptr(_Uty, remove_reference_t<_Dx>&&) = delete;
 
+#ifndef _M_CEE // TRANSITION, VSO-1006185
+    template <class _Dx2 = _Dx, enable_if_t<is_move_constructible_v<_Dx2>, int> = 0>
+#endif // _M_CEE
     unique_ptr(unique_ptr&& _Right) noexcept
-        : _Mypair(_One_then_variadic_args_t(), _STD forward<_Dx>(_Right.get_deleter()), _Right.release()) {}
+        : _Mypair(_One_then_variadic_args_t(), _STD forward<_Dx>(_Right.get_deleter()), _Right.release()) {
+    }
 
+#ifndef _M_CEE // TRANSITION, VSO-1006185
+    template <class _Dx2 = _Dx, enable_if_t<is_move_assignable_v<_Dx2>, int> = 0>
+#endif // _M_CEE
     unique_ptr& operator=(unique_ptr&& _Right) noexcept {
         if (this != _STD addressof(_Right)) {
             reset(_Right.release());
@@ -1967,8 +1975,9 @@ public:
 
     template <class _Uty, class _Ex, class _More, class _UP_pointer = typename unique_ptr<_Uty, _Ex>::pointer,
         class _UP_element_type = typename unique_ptr<_Uty, _Ex>::element_type>
-    using _Enable_conversion = enable_if_t<conjunction_v<is_array<_Uty>, is_same<pointer, element_type*>,
-        is_same<_UP_pointer, _UP_element_type*>, is_convertible<_UP_element_type (*)[], element_type (*)[]>, _More>>;
+    using _Enable_conversion = enable_if_t<
+        conjunction_v<is_array<_Uty>, is_same<pointer, element_type*>, is_same<_UP_pointer, _UP_element_type*>,
+            is_convertible<_UP_element_type (*)[], element_type (*)[]>, _More>>; // TRANSITION, GH-248
 
     template <class _Uty, class _Ex,
         class = _Enable_conversion<_Uty, _Ex,
@@ -2063,6 +2072,11 @@ _NODISCARD unique_ptr<_Ty> make_unique(size_t _Size) { // make a unique_ptr
 
 template <class _Ty, class... _Types, enable_if_t<extent_v<_Ty> != 0, int> = 0>
 void make_unique(_Types&&...) = delete;
+
+template <class _Ty, class _Dx, enable_if_t<_Is_swappable<_Dx>::value, int> = 0>
+void swap(unique_ptr<_Ty, _Dx>& _Left, unique_ptr<_Ty, _Dx>& _Right) noexcept {
+    _Left.swap(_Right);
+}
 
 template <class _Ty1, class _Dx1, class _Ty2, class _Dx2>
 _NODISCARD bool operator==(const unique_ptr<_Ty1, _Dx1>& _Left, const unique_ptr<_Ty2, _Dx2>& _Right) {

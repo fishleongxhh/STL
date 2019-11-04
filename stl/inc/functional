@@ -894,7 +894,7 @@ public:
     using _Mybase       = _Func_base<_Rx, _Types...>;
     using _Nothrow_move = is_nothrow_move_constructible<_Callable>;
 
-    template <class _Other, class = enable_if_t<!is_same_v<_Func_impl_no_alloc, decay_t<_Other>>>>
+    template <class _Other, enable_if_t<!is_same_v<_Func_impl_no_alloc, decay_t<_Other>>, int> = 0>
     explicit _Func_impl_no_alloc(_Other&& _Val) : _Callee(_STD forward<_Other>(_Val)) {}
 
     // dtor non-virtual due to _Delete_this()
@@ -1351,7 +1351,7 @@ struct _Select_fixer<_Cv_TiD, true, false, 0> { // reference_wrapper fixer
 template <class _Cv_TiD>
 struct _Select_fixer<_Cv_TiD, false, true, 0> { // nested bind fixer
 #pragma warning(push)
-#pragma warning(disable : 4100) // TRANSITION, VSO#181496, unreferenced formal parameter
+#pragma warning(disable : 4100) // TRANSITION, VSO-181496, unreferenced formal parameter
     template <class _Untuple, size_t... _Jx>
     static auto _Apply(_Cv_TiD& _Tid, _Untuple&& _Ut,
         index_sequence<_Jx...>) -> decltype(_Tid(_STD get<_Jx>(_STD move(_Ut))...)) { // call a nested bind expression
@@ -1392,7 +1392,7 @@ auto _Fix_arg(_Cv_TiD& _Tid, _Untuple&& _Ut)
 }
 
 #pragma warning(push)
-#pragma warning(disable : 4100) // TRANSITION, VSO#181496, unreferenced formal parameter
+#pragma warning(disable : 4100) // TRANSITION, VSO-181496, unreferenced formal parameter
 // FUNCTION TEMPLATE _Call_binder
 template <class _Ret, size_t... _Ix, class _Cv_FD, class _Cv_tuple_TiD, class _Untuple>
 auto _Call_binder(_Invoker_ret<_Ret>, index_sequence<_Ix...>, _Cv_FD& _Obj, _Cv_tuple_TiD& _Tpl, _Untuple&& _Ut)
@@ -1478,6 +1478,95 @@ namespace placeholders {
     _INLINE_VAR constexpr _Ph<19> _19{};
     _INLINE_VAR constexpr _Ph<20> _20{};
 } // namespace placeholders
+
+#if _HAS_CXX20
+// FUNCTION TEMPLATE _Call_front_binder
+template <size_t... _Ix, class _Cv_FD, class _Cv_tuple_TiD, class... _Unbound>
+constexpr auto _Call_front_binder(
+    index_sequence<_Ix...>, _Cv_FD&& _Obj, _Cv_tuple_TiD&& _Tpl, _Unbound&&... _Unbargs) //
+    noexcept(noexcept( //
+        _STD invoke(_STD forward<_Cv_FD>(_Obj), _STD get<_Ix>(_STD forward<_Cv_tuple_TiD>(_Tpl))...,
+            _STD forward<_Unbound>(_Unbargs)...))) //
+    -> decltype( //
+        _STD invoke(_STD forward<_Cv_FD>(_Obj), _STD get<_Ix>(_STD forward<_Cv_tuple_TiD>(_Tpl))...,
+            _STD forward<_Unbound>(_Unbargs)...)) { //
+    return _STD invoke(_STD forward<_Cv_FD>(_Obj), _STD get<_Ix>(_STD forward<_Cv_tuple_TiD>(_Tpl))...,
+        _STD forward<_Unbound>(_Unbargs)...);
+}
+
+// CLASS TEMPLATE _Front_binder
+template <class _Fx, class... _Types>
+class _Front_binder { // wrap bound callable object and arguments
+private:
+    static_assert(is_constructible_v<decay_t<_Fx>, _Fx>,
+        "std::bind_front() requires the decayed callable to be constructible from an undecayed callable");
+    static_assert(is_move_constructible_v<decay_t<_Fx>>,
+        "std::bind_front() requires the decayed callable to be move constructible");
+    static_assert(conjunction_v<is_constructible<decay_t<_Types>, _Types>...>,
+        "std::bind_front() requires the decayed bound arguments to be constructible from undecayed bound arguments");
+    static_assert(conjunction_v<is_move_constructible<decay_t<_Types>>...>,
+        "std::bind_front() requires the decayed bound arguments to be move constructible");
+
+    using _Seq    = index_sequence_for<_Types...>;
+    using _First  = decay_t<_Fx>;
+    using _Second = tuple<decay_t<_Types>...>;
+
+    _Compressed_pair<_First, _Second> _Mypair;
+
+public:
+    constexpr explicit _Front_binder(_Fx&& _Func, _Types&&... _Args)
+        : _Mypair(_One_then_variadic_args_t{}, _STD forward<_Fx>(_Func), _STD forward<_Types>(_Args)...) {}
+
+    template <class... _Unbound>
+        constexpr auto operator()(_Unbound&&... _Unbargs) //
+        & noexcept(noexcept( //
+            _Call_front_binder(_Seq{}, _Mypair._Get_first(), _Mypair._Myval2, _STD forward<_Unbound>(_Unbargs)...))) //
+          -> decltype( //
+              _Call_front_binder(
+                  _Seq{}, _Mypair._Get_first(), _Mypair._Myval2, _STD forward<_Unbound>(_Unbargs)...)) { //
+        return _Call_front_binder(_Seq{}, _Mypair._Get_first(), _Mypair._Myval2, _STD forward<_Unbound>(_Unbargs)...);
+    }
+
+    template <class... _Unbound>
+    constexpr auto operator()(_Unbound&&... _Unbargs) //
+        const& noexcept(noexcept( //
+            _Call_front_binder(_Seq{}, _Mypair._Get_first(), _Mypair._Myval2, _STD forward<_Unbound>(_Unbargs)...))) //
+        -> decltype( //
+            _Call_front_binder(_Seq{}, _Mypair._Get_first(), _Mypair._Myval2, _STD forward<_Unbound>(_Unbargs)...)) { //
+        return _Call_front_binder(_Seq{}, _Mypair._Get_first(), _Mypair._Myval2, _STD forward<_Unbound>(_Unbargs)...);
+    }
+
+    template <class... _Unbound>
+        constexpr auto operator()(_Unbound&&... _Unbargs) //
+        && noexcept(noexcept( //
+            _Call_front_binder(_Seq{}, _STD move(_Mypair._Get_first()), _STD move(_Mypair._Myval2),
+                _STD forward<_Unbound>(_Unbargs)...))) //
+           -> decltype( //
+               _Call_front_binder(_Seq{}, _STD move(_Mypair._Get_first()), _STD move(_Mypair._Myval2),
+                   _STD forward<_Unbound>(_Unbargs)...)) { //
+        return _Call_front_binder(
+            _Seq{}, _STD move(_Mypair._Get_first()), _STD move(_Mypair._Myval2), _STD forward<_Unbound>(_Unbargs)...);
+    }
+
+    template <class... _Unbound>
+    constexpr auto operator()(_Unbound&&... _Unbargs) //
+        const&& noexcept(noexcept( //
+            _Call_front_binder(_Seq{}, _STD move(_Mypair._Get_first()), _STD move(_Mypair._Myval2),
+                _STD forward<_Unbound>(_Unbargs)...))) //
+        -> decltype( //
+            _Call_front_binder(_Seq{}, _STD move(_Mypair._Get_first()), _STD move(_Mypair._Myval2),
+                _STD forward<_Unbound>(_Unbargs)...)) { //
+        return _Call_front_binder(
+            _Seq{}, _STD move(_Mypair._Get_first()), _STD move(_Mypair._Myval2), _STD forward<_Unbound>(_Unbargs)...);
+    }
+};
+
+// FUNCTION TEMPLATE bind_front
+template <class _Fx, class... _Types>
+_NODISCARD constexpr auto bind_front(_Fx&& _Func, _Types&&... _Args) {
+    return _Front_binder<_Fx, _Types...>(_STD forward<_Fx>(_Func), _STD forward<_Types>(_Args)...);
+}
+#endif // _HAS_CXX20
 
 #if _HAS_FUNCTION_ALLOCATOR_SUPPORT
 // STRUCT TEMPLATE uses_allocator
